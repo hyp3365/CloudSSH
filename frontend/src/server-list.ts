@@ -30,6 +30,22 @@ export interface ServerConfig {
   updated_at: string;
 }
 
+interface ServerSavePayload {
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_method: 'password' | 'publickey';
+  tags: string[];
+  credential?: string;
+  region?: string;
+}
+
+interface ServerSaveResponse {
+  inferred_hint?: string | null;
+  _debug?: unknown;
+}
+
 export const SERVER_PAGE_SIZE = 9;
 export const TABLET_SERVER_PAGE_SIZE = 6;
 export const MOBILE_SERVER_PAGE_SIZE = 3;
@@ -678,7 +694,14 @@ export class ServerList {
     `;
 
     try {
-      const body: any = { name, host, port, username, auth_method: authMethod, tags };
+      const body: ServerSavePayload = {
+        name,
+        host,
+        port,
+        username,
+        auth_method: authMethod,
+        tags,
+      };
       if (credential) body.credential = credential;
 
       // 区域偏好：空字符串表示 Auto（让系统自动推断）
@@ -708,18 +731,21 @@ export class ServerList {
         throw new Error(err.error || 'Save failed');
       }
 
-      const responseData = await res.json() as any;
+      const responseData = await res.json() as ServerSaveResponse;
+      const debugLines = Array.isArray(responseData._debug)
+        ? responseData._debug.filter((line): line is string => typeof line === 'string')
+        : null;
 
       // DEBUG_MODE 时，响应中包含 _debug 字段：显示完整调试日志
-      if (responseData._debug && Array.isArray(responseData._debug)) {
+      if (debugLines) {
         console.log('[locationHint 调试信息]');
-        responseData._debug.forEach((msg: string) => console.log(msg));
-        this.showDebugNotification(responseData._debug);
+        debugLines.forEach((msg) => console.log(msg));
+        this.showDebugNotification(debugLines);
       }
 
       // 非调试模式：用简短 toast 提示推断结果，让用户知道区域调度已生效
       // POST 与 PUT 路径后端均会返回最新记录（含 inferred_hint 字段）
-      if (!responseData._debug) {
+      if (!debugLines) {
         const inferred = responseData.inferred_hint || null;
         const userRegion = body.region || null;
         if (userRegion || inferred) {

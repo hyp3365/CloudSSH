@@ -8,6 +8,15 @@ const distDir = path.join(frontendDir, 'dist');
 const workerDir = path.join(rootDir, 'src', 'worker');
 const htmlTsFile = path.join(workerDir, 'html.ts');
 
+function inlineRequiredAsset(html, patterns, replacement, assetType) {
+  for (const pattern of patterns) {
+    if (pattern.test(html)) {
+      return html.replace(pattern, replacement);
+    }
+  }
+  throw new Error(`Unable to find the ${assetType} reference in the generated frontend HTML.`);
+}
+
 console.log('Building frontend...');
 try {
   execFileSync(process.execPath, ['scripts/sync-theme-editor.js'], { cwd: rootDir, stdio: 'inherit' });
@@ -46,12 +55,16 @@ try {
   }
 
   // 5. Inline CSS (replace <link rel="stylesheet" ...>)
-  html = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*href=["']\/assets\/[^"']+["'][^>]*>/i, () => `<style>${cssContent}</style>`);
-  html = html.replace(/<link[^>]*rel=["']stylesheet["'][^>]*href=["']\/src\/[^"']+["'][^>]*>/i, () => `<style>${cssContent}</style>`);
+  html = inlineRequiredAsset(html, [
+    /<link[^>]*rel=["']stylesheet["'][^>]*href=["']\/assets\/[^"']+["'][^>]*>/i,
+    /<link[^>]*rel=["']stylesheet["'][^>]*href=["']\/src\/[^"']+["'][^>]*>/i,
+  ], () => `<style>${cssContent}</style>`, 'stylesheet');
 
   // 6. Inline JS (replace <script type="module" src="/src/main.ts"></script> or similar)
-  html = html.replace(/<script[^>]*type=["']module["'][^>]*src=["']\/assets\/[^"']+["'][^>]*><\/script>/i, () => `<script type="module">${jsContent}</script>`);
-  html = html.replace(/<script[^>]*type=["']module["'][^>]*src=["']\/src\/[^"']+["'][^>]*><\/script>/i, () => `<script type="module">${jsContent}</script>`);
+  html = inlineRequiredAsset(html, [
+    /<script[^>]*type=["']module["'][^>]*src=["']\/assets\/[^"']+["'][^>]*><\/script>/i,
+    /<script[^>]*type=["']module["'][^>]*src=["']\/src\/[^"']+["'][^>]*><\/script>/i,
+  ], () => `<script type="module">${jsContent}</script>`, 'module script');
 
   // 7. Write to src/worker/html.ts
   const escapedHtml = html
